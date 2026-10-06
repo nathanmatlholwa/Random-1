@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Maths to Failure">
+<meta name="theme-color" content="#14202e">
+<!-- Only the two model providers may receive network requests from the page, so your API key cannot be sent anywhere else. -->
+<meta http-equiv="Content-Security-Policy" content="connect-src https://api.anthropic.com https://generativelanguage.googleapis.com; object-src 'none'; base-uri 'none'">
+<title>Maths to Failure</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<link rel="stylesheet" href="styles.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<script defer src="app.js"></script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span class="brand-name">Maths to Failure</span>
+    <span class="brand-sub">IEB Grade 12</span>
+  </div>
+  <nav class="tabs" id="tabs" aria-label="Sections">
+    <button data-tab="session" class="on">Session</button>
+    <button data-tab="progress">Weak spots</button>
+    <button data-tab="library">Library</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+</header>
+
+<main>
+  <section id="view-session" class="view"></section>
+  <section id="view-progress" class="view" hidden></section>
+  <section id="view-library" class="view" hidden></section>
+  <section id="view-settings" class="view" hidden></section>
+</main>
+
+<div id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

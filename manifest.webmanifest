@@ -1,0 +1,9 @@
+{
+  "name": "Maths to Failure",
+  "short_name": "Maths to Failure",
+  "description": "Adaptive IEB Grade 12 maths practice that presses on the exact skills you get wrong.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#eef1f4",
+  "theme_color": "#14202e"
+}
