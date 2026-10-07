@@ -34,6 +34,7 @@ struct MainTabs: View {
                 .tag(AppTab.weakSpots)
             LibraryTab()
                 .tabItem { Label("Library", systemImage: "books.vertical.fill") }
+                .badge(app.ingestBusy ? max(app.ingestTotal - app.ingestDone, 1) : 0)
                 .tag(AppTab.library)
             SettingsTab()
                 .tabItem { Label("Settings", systemImage: "gearshape.fill") }

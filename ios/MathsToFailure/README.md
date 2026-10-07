@@ -37,7 +37,7 @@ In Xcode, select the **MathsToFailure** target, open **Signing & Capabilities** 
 1. **Create an account** with an email and password. Supabase may email you a confirmation link first. For a personal project you can switch that off in the Supabase dashboard under Authentication, Providers, Email, "Confirm email".
 2. **Settings, API keys.** Paste your Anthropic key and/or Gemini key. They go straight into the device Keychain.
 3. **Settings, Model.** Pick a model from the dropdown. It is used for everything. Switch on "Choose a different model for each job" if you want separate ones for reading papers, marking, writing questions and checking answers. If a newer model is not listed, use "Add a model that is not listed".
-4. **Library, Choose PDFs.** Select papers and memos together, check the pairs, then Upload and read.
+4. **Library, Choose PDFs.** Select papers and memos together. A list appears with a summary of what was matched. Nothing uploads until you press **Upload and read**. Then a progress card appears at the top of the screen and the Library tab shows a badge with the number of papers left. Keep the app open until it finishes.
 5. **Session.** Choose a time limit and a mode, then start.
 
 ## Where things live

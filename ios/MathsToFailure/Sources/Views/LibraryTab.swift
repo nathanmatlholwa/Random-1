@@ -4,22 +4,32 @@ import UniformTypeIdentifiers
 struct LibraryTab: View {
     @EnvironmentObject var app: AppModel
     @State private var picking = false
+    @State private var loadingFiles = false
     @State private var staged: [StagedPair] = []
     @State private var spare: [PickedPDF] = []
+    @State private var summary = ""
     @State private var pickError: String?
     @State private var toDelete: Paper?
 
     private var readyPairs: [StagedPair] { staged.filter { $0.paper != nil && $0.memo != nil } }
+    private var missingMemo: Int { staged.filter { $0.memo == nil }.count }
     private var paperQuestions: [Question] { app.questions.filter { $0.source == "paper" } }
 
     var body: some View {
         NavigationStack {
-            List {
-                importSection
-                if !staged.isEmpty || !spare.isEmpty { stagedSection }
-                if app.ingestBusy || !app.ingestLog.isEmpty { progressSection }
-                papersSection
-                bankSection
+            ScrollViewReader { proxy in
+                List {
+                    if app.ingestBusy { progressSection }
+                    importSection
+                    if !staged.isEmpty || !spare.isEmpty { stagedSection }
+                    if !app.ingestBusy && !app.ingestLog.isEmpty { logSection }
+                    papersSection
+                    bankSection
+                }
+                .onChange(of: staged.count) { _, count in
+                    // After choosing files, jump straight to the list so the Upload button is in view.
+                    if count > 0 { withAnimation { proxy.scrollTo("staged-top", anchor: .top) } }
+                }
             }
             .navigationTitle("Library")
             .fileImporter(isPresented: $picking, allowedContentTypes: [.pdf], allowsMultipleSelection: true) { result in
@@ -41,16 +51,50 @@ struct LibraryTab: View {
 
     // MARK: sections
 
+    /// Always at the top while a batch is running, so it is obvious that work is happening.
+    private var progressSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    ProgressView()
+                    Text(app.ingestTotal > 0
+                         ? "Paper \(min(app.ingestDone + 1, app.ingestTotal)) of \(app.ingestTotal)"
+                         : "Working...")
+                        .font(.headline)
+                    Spacer()
+                    Button("Stop", role: .destructive) { app.cancelIngest() }
+                        .buttonStyle(.bordered)
+                }
+                if app.ingestTotal > 0 {
+                    ProgressView(value: Double(app.ingestDone), total: Double(app.ingestTotal))
+                }
+                Text(app.ingestStatus).font(.subheadline).foregroundStyle(.secondary)
+                ForEach(Array(app.ingestLog.suffix(4).enumerated()), id: \.offset) { _, line in
+                    Text(line).font(.footnote.monospaced())
+                }
+                Text("Keep the app open. Each paper takes a few minutes. Finished papers are saved as they go.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+        } header: { Text("Uploading and reading") }
+    }
+
     private var importSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Add as many question papers as you like. Choose the papers and their memorandums together. The app matches them by file name, uploads the originals to your private storage, and reads every question and mark allocation.")
+                Text("Step 1. Choose the papers and their memorandums together. Step 2. Check the list that appears and press Upload and read.")
                     .font(.subheadline).foregroundStyle(.secondary)
                 Button { picking = true } label: {
                     Label("Choose PDFs", systemImage: "doc.badge.plus")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(app.ingestBusy)
+                .disabled(app.ingestBusy || loadingFiles)
+                if loadingFiles {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Opening your files...").font(.subheadline)
+                    }
+                }
             }
             .padding(.vertical, 4)
         } header: { Text("Add papers") }
@@ -58,6 +102,25 @@ struct LibraryTab: View {
 
     private var stagedSection: some View {
         Section {
+            Text(summary).font(.subheadline.weight(.medium)).id("staged-top")
+
+            Button {
+                let pairs = readyPairs
+                staged = []
+                spare = []
+                summary = ""
+                app.startIngest(pairs: pairs)
+            } label: {
+                Text(readyPairs.isEmpty
+                     ? "Nothing ready to upload"
+                     : "Upload and read \(readyPairs.count) paper\(readyPairs.count == 1 ? "" : "s")")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(readyPairs.isEmpty || app.ingestBusy)
+
             ForEach($staged) { $pair in
                 VStack(alignment: .leading, spacing: 6) {
                     TextField("Name", text: $pair.name).font(.headline)
@@ -76,7 +139,8 @@ struct LibraryTab: View {
                                 Button(m.name) { assign(m, to: pair.id) }
                             }
                         } label: {
-                            Label(spare.isEmpty ? "No memorandum found" : "Choose its memorandum", systemImage: "exclamationmark.triangle")
+                            Label(spare.isEmpty ? "No memorandum found. This paper will be skipped." : "Choose its memorandum",
+                                  systemImage: "exclamationmark.triangle")
                                 .foregroundStyle(.orange)
                         }
                         .disabled(spare.isEmpty)
@@ -86,32 +150,16 @@ struct LibraryTab: View {
             .onDelete { staged.remove(atOffsets: $0) }
 
             if !spare.isEmpty {
-                Text("Unmatched memorandums: " + spare.map { $0.name }.joined(separator: ", "))
+                Text("Memorandums with no matching paper: " + spare.map { $0.name }.joined(separator: ", "))
                     .font(.footnote).foregroundStyle(.secondary)
             }
-            Button {
-                let pairs = readyPairs
-                staged = []
-                spare = []
-                Task { await app.ingest(pairs: pairs) }
-            } label: {
-                Text(readyPairs.isEmpty ? "Nothing ready yet" : "Upload and read \(readyPairs.count) paper\(readyPairs.count == 1 ? "" : "s")")
-                    .bold()
-            }
-            .disabled(readyPairs.isEmpty || app.ingestBusy)
-        } header: { Text("Ready to add") } footer: {
-            Text("Reading a paper takes a minute or two and uses your API key. Swipe a row to remove it.")
+        } header: { Text("Step 2. Ready to add") } footer: {
+            Text("Reading uses your API key and makes several model calls per paper. Swipe a row to remove it.")
         }
     }
 
-    private var progressSection: some View {
-        Section("Progress") {
-            if app.ingestBusy {
-                HStack(spacing: 10) {
-                    ProgressView()
-                    Text(app.ingestStatus).font(.subheadline)
-                }
-            }
+    private var logSection: some View {
+        Section("Last upload") {
             ForEach(Array(app.ingestLog.enumerated()), id: \.offset) { _, line in
                 Text(line).font(.footnote.monospaced())
             }
@@ -176,6 +224,15 @@ struct LibraryTab: View {
         guard let i = staged.firstIndex(where: { $0.id == id }) else { return }
         staged[i].memo = memo
         spare.removeAll { $0.id == memo.id }
+        refreshSummary()
+    }
+
+    private func refreshSummary() {
+        let total = staged.count + spare.count
+        var parts = ["\(readyPairs.count) paper\(readyPairs.count == 1 ? "" : "s") matched with a memorandum"]
+        if missingMemo > 0 { parts.append("\(missingMemo) without a memorandum") }
+        if !spare.isEmpty { parts.append("\(spare.count) memorandum\(spare.count == 1 ? "" : "s") with no paper") }
+        summary = "\(total) file\(total == 1 ? "" : "s") loaded. " + parts.joined(separator: ", ") + "."
     }
 
     private func handle(_ result: Result<[URL], Error>) {
@@ -183,20 +240,33 @@ struct LibraryTab: View {
         case .failure(let error):
             pickError = error.localizedDescription
         case .success(let urls):
-            var fresh: [PickedPDF] = []
-            for url in urls {
-                let opened = url.startAccessingSecurityScopedResource()
-                defer { if opened { url.stopAccessingSecurityScopedResource() } }
-                if let data = try? Data(contentsOf: url) {
-                    fresh.append(PickedPDF(name: url.lastPathComponent, data: data))
+            loadingFiles = true
+            Task {
+                // Reading many PDFs is slow, so it happens off the main thread and the screen stays responsive.
+                let fresh = await Task.detached(priority: .userInitiated) { () -> [PickedPDF] in
+                    var out: [PickedPDF] = []
+                    for url in urls {
+                        let opened = url.startAccessingSecurityScopedResource()
+                        defer { if opened { url.stopAccessingSecurityScopedResource() } }
+                        if let data = try? Data(contentsOf: url) {
+                            out.append(PickedPDF(name: url.lastPathComponent, data: data))
+                        }
+                    }
+                    return out
+                }.value
+                loadingFiles = false
+                if fresh.isEmpty {
+                    pickError = "None of the selected files could be read. Check that they are PDFs stored on this device or in iCloud Drive."
+                    return
                 }
+                let existing = staged.flatMap { [$0.paper, $0.memo].compactMap { $0 } } + spare
+                var all = existing
+                for f in fresh where !all.contains(where: { $0.name == f.name }) { all.append(f) }
+                let paired = PaperPairing.pair(all)
+                staged = paired.pairs
+                spare = paired.spareMemos
+                refreshSummary()
             }
-            let existing = staged.flatMap { [$0.paper, $0.memo].compactMap { $0 } } + spare
-            var all = existing
-            for f in fresh where !all.contains(where: { $0.name == f.name }) { all.append(f) }
-            let paired = PaperPairing.pair(all)
-            staged = paired.pairs
-            spare = paired.spareMemos
         }
     }
 }

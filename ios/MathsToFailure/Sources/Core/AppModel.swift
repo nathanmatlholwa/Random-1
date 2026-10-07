@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 enum AppTab: Hashable {
     case session, weakSpots, library, settings
@@ -74,6 +75,9 @@ final class AppModel: ObservableObject {
     @Published var ingestBusy = false
     @Published var ingestStatus = ""
     @Published var ingestLog: [String] = []
+    @Published var ingestDone = 0
+    @Published var ingestTotal = 0
+    private var ingestTask: Task<Void, Never>?
 
     let sb = SupabaseClient()
     let llm: LLMService
@@ -230,12 +234,33 @@ final class AppModel: ObservableObject {
     private func log(_ text: String) { ingestLog.append(text) }
 
     /// Uploads each pair, then reads it in small chunks of questions so replies never overflow.
-    func ingest(pairs: [StagedPair]) async {
+    /// Starts the batch in the background. It keeps running if you switch tabs.
+    func startIngest(pairs: [StagedPair]) {
         guard !ingestBusy else { return }
-        ingestBusy = true
+        ingestBusy = true          // set now so the screen reacts the instant the button is pressed
         ingestLog = []
-        defer { ingestBusy = false; ingestStatus = "" }
+        ingestDone = 0
+        ingestTotal = pairs.filter { $0.paper != nil && $0.memo != nil }.count
+        ingestStatus = "Starting..."
+        ingestTask = Task { await ingest(pairs: pairs) }
+    }
+
+    func cancelIngest() {
+        ingestTask?.cancel()
+        ingestStatus = "Stopping after the current step..."
+    }
+
+    private func ingest(pairs: [StagedPair]) async {
+        // Keep the screen awake: iOS pauses network work once the app is no longer in front.
+        UIApplication.shared.isIdleTimerDisabled = true
+        defer {
+            UIApplication.shared.isIdleTimerDisabled = false
+            ingestBusy = false
+            ingestStatus = ""
+            ingestTask = nil
+        }
         for pair in pairs {
+            if Task.isCancelled { log("Stopped. Papers already finished are kept."); break }
             guard let paper = pair.paper, let memo = pair.memo else {
                 log("Skipped \(pair.name): it has no memorandum.")
                 continue
@@ -244,9 +269,14 @@ final class AppModel: ObservableObject {
                 let count = try await ingestOne(name: pair.name, paperData: paper.data, memoData: memo.data)
                 log("\(pair.name): added \(count) questions.")
             } catch {
+                if Task.isCancelled {
+                    log("\(pair.name): stopped before it finished. Use Read again to finish it later.")
+                    break
+                }
                 log("\(pair.name) failed: \(error.localizedDescription)")
                 if case AppError.notSignedIn = error { report(error); break }
             }
+            ingestDone += 1
         }
         try? await loadSkills()
     }
@@ -279,6 +309,7 @@ final class AppModel: ObservableObject {
             var total = 0
             var style = ""
             for (i, chunk) in chunks.enumerated() {
+                try Task.checkCancellation()
                 ingestStatus = "\(name): reading question \(chunk.joined(separator: " and ")) (part \(i + 1) of \(chunks.count))"
                 let known = skills.values.map { "\($0.topic) :: \($0.skill)" }
                 let result = try await tutor.extract(choice: model, paper: paperData, memo: memoData,
@@ -295,7 +326,8 @@ final class AppModel: ObservableObject {
             try await patchPaper(id, ["status": "done", "error": NSNull(), "question_count": total, "style_notes": style])
             return total
         } catch {
-            try? await patchPaper(id, ["status": "failed", "error": error.localizedDescription])
+            let reason = (error is CancellationError || Task.isCancelled) ? "Stopped before it finished." : error.localizedDescription
+            try? await patchPaper(id, ["status": "failed", "error": reason])
             throw error
         }
     }
