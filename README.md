@@ -1,5 +1,7 @@
 # Maths to Failure
 
+> A native iPad and Mac version with Supabase sync lives in [`ios/MathsToFailure`](ios/MathsToFailure/README.md). This page describes the original browser version.
+
 Adaptive IEB Grade 12 Mathematics practice for the iPad. You upload past papers and memorandums, answer questions by hand, and photograph your working. An AI model marks it against the memorandum, finds the exact line where you went wrong, and keeps pressing on that skill in new forms until you hold it.
 
 No server, no build step. It is plain HTML, CSS and JavaScript. Your API key and data stay in your browser.

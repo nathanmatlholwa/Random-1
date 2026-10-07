@@ -1,0 +1,8 @@
+# Xcode
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+build/
+.DS_Store
+# XcodeGen output is regenerated from ios/MathsToFailure/project.yml
+ios/MathsToFailure/MathsToFailure.xcodeproj/
