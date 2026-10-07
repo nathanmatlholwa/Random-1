@@ -7,13 +7,32 @@ enum AppTab: Hashable {
 
 /// Non-secret preferences. API keys are never stored here; they live in the Keychain.
 struct AppSettings: Codable {
+    /// One model for every job, or a separate model per job.
+    var useOneModel = true
+    var allModel = ModelChoice(provider: .claude, model: ModelCatalog.defaultModel(for: .claude))
     var roles: [String: ModelChoice] = [:]
+    /// Model ids the user added because the provider has released something newer than the built-in list.
+    var customModels: [ModelChoice] = []
     var verify = true
     var minutes = 30
 
     private static let storageKey = "mtf.settings.v1"
 
-    func choice(for role: Role) -> ModelChoice { roles[role.rawValue] ?? role.defaultChoice }
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        useOneModel = try c.decodeIfPresent(Bool.self, forKey: .useOneModel) ?? true
+        allModel = try c.decodeIfPresent(ModelChoice.self, forKey: .allModel) ?? allModel
+        roles = try c.decodeIfPresent([String: ModelChoice].self, forKey: .roles) ?? [:]
+        customModels = try c.decodeIfPresent([ModelChoice].self, forKey: .customModels) ?? []
+        verify = try c.decodeIfPresent(Bool.self, forKey: .verify) ?? true
+        minutes = try c.decodeIfPresent(Int.self, forKey: .minutes) ?? 30
+    }
+
+    func choice(for role: Role) -> ModelChoice {
+        useOneModel ? allModel : (roles[role.rawValue] ?? role.defaultChoice)
+    }
 
     static func load() -> AppSettings {
         if let data = UserDefaults.standard.data(forKey: storageKey),

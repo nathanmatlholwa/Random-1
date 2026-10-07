@@ -19,13 +19,7 @@ struct SettingsTab: View {
                     Text("Keys are stored in this device's Keychain. They are never sent to Supabase or anywhere except the provider they belong to, and they do not sync to your other devices, so enter them on each one.")
                 }
 
-                Section {
-                    ForEach(Role.allCases) { role in RoleRow(role: role) }
-                } header: {
-                    Text("Models for each job")
-                } footer: {
-                    Text("Each job can use a different model. If the chosen provider has no key but the other one does, the other provider's default model is used. Model names change over time, so type any model id the provider lists.")
-                }
+                ModelSection()
 
                 Section {
                     Toggle("Check new questions by solving them twice", isOn: Binding(
@@ -135,42 +129,118 @@ private struct KeyRow: View {
     }
 }
 
-private struct RoleRow: View {
-    let role: Role
-    @EnvironmentObject var app: AppModel
+/// A dropdown of known models. Models whose provider has no saved key are marked.
+private struct ModelPicker: View {
+    let title: String
+    @Binding var selection: ModelChoice
+    let custom: [ModelChoice]
 
-    private var choice: ModelChoice { app.settings.choice(for: role) }
+    private func models(for provider: Provider) -> [ModelChoice] {
+        var items = ModelCatalog.options(for: provider).map { ModelChoice(provider: provider, model: $0.id) }
+        for c in custom where c.provider == provider && !items.contains(c) { items.append(c) }
+        if selection.provider == provider && !items.contains(selection) { items.append(selection) }
+        return items
+    }
 
-    private func save(_ c: ModelChoice) {
-        app.updateSettings { $0.roles[role.rawValue] = c }
+    private func label(_ c: ModelChoice) -> String {
+        let known = ModelCatalog.options(for: c.provider).first(where: { $0.id == c.model })?.label ?? c.model
+        return LLMService.hasKey(c.provider) ? known : known + " (no key)"
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(role.title).font(.headline)
-            Text(role.detail).font(.footnote).foregroundStyle(.secondary)
-            Picker("Provider", selection: Binding(
-                get: { choice.provider },
-                set: { p in save(ModelChoice(provider: p, model: ModelCatalog.defaultModel(for: p))) }
-            )) {
-                ForEach(Provider.allCases) { Text($0.title).tag($0) }
+        Picker(title, selection: $selection) {
+            Section("Claude") {
+                ForEach(models(for: .claude), id: \.self) { Text(label($0)).tag($0) }
             }
-            .pickerStyle(.segmented)
-            HStack {
-                TextField("Model id", text: Binding(
-                    get: { choice.model },
-                    set: { m in save(ModelChoice(provider: choice.provider, model: m)) }
-                ))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .font(.body.monospaced())
-                Menu("Suggested") {
-                    ForEach(ModelCatalog.options(for: choice.provider)) { option in
-                        Button(option.label) { save(ModelChoice(provider: choice.provider, model: option.id)) }
+            Section("Gemini") {
+                ForEach(models(for: .gemini), id: \.self) { Text(label($0)).tag($0) }
+            }
+        }
+        .pickerStyle(.menu)
+    }
+}
+
+private struct ModelSection: View {
+    @EnvironmentObject var app: AppModel
+    @State private var newProvider: Provider = .claude
+    @State private var newID = ""
+
+    private var custom: [ModelChoice] { app.settings.customModels }
+
+    var body: some View {
+        Section {
+            ModelPicker(
+                title: app.settings.useOneModel ? "Model" : "Default model",
+                selection: Binding(
+                    get: { app.settings.allModel },
+                    set: { m in app.updateSettings { $0.allModel = m } }
+                ),
+                custom: custom
+            )
+
+            Toggle("Choose a different model for each job", isOn: Binding(
+                get: { !app.settings.useOneModel },
+                set: { perJob in
+                    app.updateSettings { s in
+                        s.useOneModel = !perJob
+                        if perJob && s.roles.isEmpty {
+                            for role in Role.allCases { s.roles[role.rawValue] = s.allModel }
+                        }
+                    }
+                }
+            ))
+
+            if !app.settings.useOneModel {
+                ForEach(Role.allCases) { role in
+                    VStack(alignment: .leading, spacing: 2) {
+                        ModelPicker(
+                            title: role.title,
+                            selection: Binding(
+                                get: { app.settings.roles[role.rawValue] ?? app.settings.allModel },
+                                set: { m in app.updateSettings { $0.roles[role.rawValue] = m } }
+                            ),
+                            custom: custom
+                        )
+                        Text(role.detail).font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }
+
+            DisclosureGroup("Add a model that is not listed") {
+                Picker("Provider", selection: $newProvider) {
+                    ForEach(Provider.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                TextField("Model id from the provider", text: $newID)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.body.monospaced())
+                Button("Add to the lists above") {
+                    let id = newID.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !id.isEmpty else { return }
+                    let choice = ModelChoice(provider: newProvider, model: id)
+                    app.updateSettings { s in
+                        if !s.customModels.contains(choice) { s.customModels.append(choice) }
+                    }
+                    newID = ""
+                }
+                .disabled(newID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                ForEach(custom, id: \.self) { c in
+                    HStack {
+                        Text(c.model).font(.footnote.monospaced())
+                        Spacer()
+                        Text(c.provider.title).font(.caption).foregroundStyle(.secondary)
+                        Button(role: .destructive) {
+                            app.updateSettings { s in s.customModels.removeAll { $0 == c } }
+                        } label: { Image(systemName: "trash") }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            }
+        } header: {
+            Text("Model")
+        } footer: {
+            Text("Pick the model the app should use. If the provider of your choice has no saved key but the other one does, the other provider's default model is used instead. With one model for every job, answer checking uses the same model that wrote the question; choose separate models if you want a different one to check.")
         }
-        .padding(.vertical, 4)
     }
 }

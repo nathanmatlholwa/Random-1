@@ -4,7 +4,7 @@ A SwiftUI app (iPad, and Mac through Mac Catalyst) that practises IEB Grade 12 M
 
 - **Many papers at once.** Pick a stack of question papers and memorandums in one go. They are matched by file name, the originals are kept in your private Supabase Storage, and every question and memo line is read out in small chunks.
 - **A Supabase database.** Papers, questions, skill levels, error patterns and every attempt are saved to your own account and appear on every device you sign in on.
-- **Different models for different jobs.** Reading papers, marking, writing questions and checking answers each have their own Claude or Gemini model.
+- **Pick your model.** One dropdown of Claude and Gemini models, or a separate choice for each job (reading papers, marking, writing questions, checking answers).
 
 It also adds **Apple Pencil writing inside the app**, a **Challenge mode** that writes new hard questions, and an **answer check done by a different model family** than the one that wrote the question.
 
@@ -36,7 +36,7 @@ In Xcode, select the **MathsToFailure** target, open **Signing & Capabilities** 
 
 1. **Create an account** with an email and password. Supabase may email you a confirmation link first. For a personal project you can switch that off in the Supabase dashboard under Authentication, Providers, Email, "Confirm email".
 2. **Settings, API keys.** Paste your Anthropic key and/or Gemini key. They go straight into the device Keychain.
-3. **Settings, Models.** Pick a model for each job, or leave the defaults. Model names change, so you can type any id the provider lists.
+3. **Settings, Model.** Pick a model from the dropdown. It is used for everything. Switch on "Choose a different model for each job" if you want separate ones for reading papers, marking, writing questions and checking answers. If a newer model is not listed, use "Add a model that is not listed".
 4. **Library, Choose PDFs.** Select papers and memos together, check the pairs, then Upload and read.
 5. **Session.** Choose a time limit and a mode, then start.
 
